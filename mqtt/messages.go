@@ -20,14 +20,14 @@ type CommandMessage struct {
 }
 
 func (m *CommandMessage) ValidateToPublish() error {
-	if m.Command == nil && m.Devices == nil {
+	if m.Command == nil && len(m.Devices) == 0 {
 		return errors.New("empty command message")
 	}
-	if m.Devices != nil && len(m.Devices) != 1 {
-		return errors.New("you can publish only one device command per message")
-	}
-	if m.Command != nil && m.Devices != nil {
+	if m.Command != nil && len(m.Devices) > 0 {
 		return errors.New("sending more than one command per request is prohibited")
+	}
+	if len(m.Devices) > 1 {
+		return errors.New("you can publish only one device command per message")
 	}
 	return nil
 }

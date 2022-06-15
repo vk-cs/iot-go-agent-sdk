@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
+	"time"
 
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/mailru/surgemq/message"
@@ -34,9 +34,10 @@ func MQTTExample(login, password, host string) error {
 	agentID := *agentConfig.Payload.Agent.ID
 
 	fmt.Println("Creating MQTT agent")
-	mqttClient, err := sdk.NewMQTTClient(agentID, login, password, host)
-	if err != nil {
-		return fmt.Errorf("example error during MQTT client creation: %w", err)
+	mqttClient := sdk.NewMQTTClient(agentID, host)
+
+	if err := mqttClient.Connect(login, password); err != nil {
+		return fmt.Errorf("example error during MQTT client connection: %w", err)
 	}
 
 	fmt.Println("Sending event (status of agent)")
@@ -47,7 +48,7 @@ func MQTTExample(login, password, host string) error {
 		Timestamp: sdk.Now(),
 	}
 	bootstrappingEventMessage := &mqtt.EventMessage{Tags: []*mqtt.EventTag{bootstrappingEventTag}}
-	if err := mqttClient.PublishEvent(generatePacketID(), bootstrappingEventMessage); err != nil {
+	if err := mqttClient.PublishEvent(bootstrappingEventMessage); err != nil {
 		return fmt.Errorf("example error during first event publishing: %w", err)
 	}
 
@@ -58,7 +59,7 @@ func MQTTExample(login, password, host string) error {
 		{ID: *statusTag.ID, Value: "online", Timestamp: now},
 		{ID: *updatedTag.ID, Value: now, Timestamp: now},
 	}}
-	if err := mqttClient.PublishEvent(generatePacketID(), onlineEventMessage); err != nil {
+	if err := mqttClient.PublishEvent(onlineEventMessage); err != nil {
 		return fmt.Errorf("example error during online event publishing: %w", err)
 	}
 
@@ -68,6 +69,7 @@ func MQTTExample(login, password, host string) error {
 	}
 
 	fmt.Println("Sending temperature from thermometer of first device")
+	rand.Seed(time.Now().UnixNano())
 	temperature := rand.Intn(30)
 	temperatureTag, found := sdk.FindTagByPath(
 		agentConfig.Payload.Agent.Devices[0].Tag.Children,
@@ -79,7 +81,7 @@ func MQTTExample(login, password, host string) error {
 	temperatureEventMessage := &mqtt.EventMessage{Tags: []*mqtt.EventTag{
 		{ID: *temperatureTag.ID, Value: temperature, Timestamp: sdk.Now()},
 	}}
-	if err := mqttClient.PublishEvent(generatePacketID(), temperatureEventMessage); err != nil {
+	if err := mqttClient.PublishEvent(temperatureEventMessage); err != nil {
 		return fmt.Errorf("example error during temperature event publishing: %w", err)
 	}
 
@@ -88,7 +90,7 @@ func MQTTExample(login, password, host string) error {
 		Message:   fmt.Sprintf("temperature is %d", temperature),
 		Timestamp: sdk.Now(),
 	}
-	if err := mqttClient.PublishLog(generatePacketID(), logMessage); err != nil {
+	if err := mqttClient.PublishLog(logMessage); err != nil {
 		return fmt.Errorf("example error during log publishing: %w", err)
 	}
 
@@ -97,10 +99,6 @@ func MQTTExample(login, password, host string) error {
 
 	fmt.Println("Finishing MQTT example func")
 	return nil
-}
-
-func generatePacketID() uint16 {
-	return uint16(rand.Intn(math.MaxUint16))
 }
 
 type subscriberExample struct {
@@ -117,7 +115,6 @@ func (s *subscriberExample) OnPublish(msg *message.PublishMessage) error {
 		for _, deviceCommand := range commandMessage.Devices {
 			fmt.Println("Notifying about device command received")
 			if err := s.MQTTClient.PublishDeviceCommandStatus(
-				generatePacketID(),
 				deviceCommand.ID,
 				&mqtt.CommandStatusMessage{
 					ID:        deviceCommand.Command.ID,
@@ -132,7 +129,6 @@ func (s *subscriberExample) OnPublish(msg *message.PublishMessage) error {
 
 			fmt.Println("Notifying about device command done")
 			if err := s.MQTTClient.PublishDeviceCommandStatus(
-				generatePacketID(),
 				deviceCommand.ID,
 				&mqtt.CommandStatusMessage{
 					ID:        deviceCommand.Command.ID,
@@ -147,7 +143,6 @@ func (s *subscriberExample) OnPublish(msg *message.PublishMessage) error {
 		if commandMessage.Command != nil {
 			fmt.Println("Notifying about agent command received")
 			if err := s.MQTTClient.PublishAgentCommandStatus(
-				generatePacketID(),
 				&mqtt.CommandStatusMessage{
 					ID:        commandMessage.Command.ID,
 					Status:    mqtt.Received,
@@ -161,7 +156,6 @@ func (s *subscriberExample) OnPublish(msg *message.PublishMessage) error {
 
 			fmt.Println("Notifying about agent command failed (for test reason)")
 			if err := s.MQTTClient.PublishAgentCommandStatus(
-				generatePacketID(),
 				&mqtt.CommandStatusMessage{
 					ID:        commandMessage.Command.ID,
 					Status:    mqtt.Failed,

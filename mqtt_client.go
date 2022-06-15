@@ -3,6 +3,9 @@ package iot_go_agent_sdk
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/rand"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/mailru/surgemq/message"
@@ -22,12 +25,10 @@ const (
 type MQTTClient struct {
 	connector *service.Client
 	agentID   int64
-	login     string
-	password  string
 	host      string
 }
 
-func (c *MQTTClient) Connect() error {
+func (c *MQTTClient) Connect(login, password string) error {
 	msg := message.NewConnectMessage()
 	if err := msg.SetWillQos(message.QosAtLeastOnce); err != nil {
 		return fmt.Errorf("failed to set will QoS: %w", err)
@@ -40,8 +41,8 @@ func (c *MQTTClient) Connect() error {
 		return fmt.Errorf("failed to set client ID: %w", err)
 	}
 	msg.SetWillFlag(true)
-	msg.SetUsername([]byte(c.login))
-	msg.SetPassword([]byte(c.password))
+	msg.SetUsername([]byte(login))
+	msg.SetPassword([]byte(password))
 	msg.SetCleanSession(true)
 
 	return c.connector.Connect(c.host, msg)
@@ -51,29 +52,27 @@ func (c *MQTTClient) Disconnect() {
 	c.connector.Disconnect()
 }
 
-func (c *MQTTClient) PublishEvent(packetID uint16, eventMessage *mqtt.EventMessage) error {
-	return c.publishMessage(packetID, EventTopic, eventMessage)
+func (c *MQTTClient) PublishEvent(eventMessage *mqtt.EventMessage) error {
+	return c.publishMessage(EventTopic, eventMessage)
 }
 
-func (c *MQTTClient) PublishLog(packetID uint16, logMessage *mqtt.LogMessage) error {
-	return c.publishMessage(packetID, LogTopic, logMessage)
+func (c *MQTTClient) PublishLog(logMessage *mqtt.LogMessage) error {
+	return c.publishMessage(LogTopic, logMessage)
 }
 
-func (c *MQTTClient) PublishCommand(packetID uint16, agentID int64, command *mqtt.CommandMessage) error {
+func (c *MQTTClient) PublishCommand(agentID int64, command *mqtt.CommandMessage) error {
 	topic := fmt.Sprintf(CommandTopic, agentID)
-	return c.publishMessage(packetID, topic, command)
+	return c.publishMessage(topic, command)
 }
 
-func (c *MQTTClient) PublishAgentCommandStatus(packetID uint16, command *mqtt.CommandStatusMessage) error {
+func (c *MQTTClient) PublishAgentCommandStatus(command *mqtt.CommandStatusMessage) error {
 	topic := fmt.Sprintf(CommandAgentStatusTopic, c.agentID)
-	return c.publishMessage(packetID, topic, command)
+	return c.publishMessage(topic, command)
 }
 
-func (c *MQTTClient) PublishDeviceCommandStatus(
-	packetID uint16, deviceID int64, command *mqtt.CommandStatusMessage,
-) error {
+func (c *MQTTClient) PublishDeviceCommandStatus(deviceID int64, command *mqtt.CommandStatusMessage) error {
 	topic := fmt.Sprintf(CommandDeviceStatusTopic, deviceID)
-	return c.publishMessage(packetID, topic, command)
+	return c.publishMessage(topic, command)
 }
 
 func (c *MQTTClient) Subscribe(subscriber service.Subscriber) error {
@@ -88,9 +87,9 @@ func (c *MQTTClient) Subscribe(subscriber service.Subscriber) error {
 	return nil
 }
 
-func (c *MQTTClient) publishMessage(packetID uint16, topic string, payload mqtt.Message) error {
+func (c *MQTTClient) publishMessage(topic string, payload mqtt.Message) error {
 	msg := message.NewPublishMessage()
-	msg.SetPacketId(packetID)
+	msg.SetPacketId(uint16(rand.Intn(math.MaxUint16)))
 	msg.SetRetain(true)
 
 	if err := msg.SetQoS(message.QosAtLeastOnce); err != nil {
@@ -114,16 +113,11 @@ func (c *MQTTClient) publishMessage(packetID uint16, topic string, payload mqtt.
 	return c.connector.Publish(msg, nil)
 }
 
-func NewMQTTClient(agentID int64, login, password, host string) (*MQTTClient, error) {
-	newClient := &MQTTClient{
+func NewMQTTClient(agentID int64, host string) *MQTTClient {
+	rand.Seed(time.Now().UnixNano())
+	return &MQTTClient{
 		connector: &service.Client{},
 		agentID:   agentID,
-		login:     login,
-		password:  password,
 		host:      host,
 	}
-	if err := newClient.Connect(); err != nil {
-		return nil, fmt.Errorf("failed to connect to broker: %w", err)
-	}
-	return newClient, nil
 }
