@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,9 +24,11 @@ const (
 )
 
 type MQTTClient struct {
-	connector *service.Client
-	agentID   int64
-	host      string
+	lock            *sync.RWMutex
+	connector       *service.Client
+	agentID         int64
+	host            string
+	randomGenerator *rand.Rand
 }
 
 func (c *MQTTClient) Connect(login, password string) error {
@@ -89,7 +92,7 @@ func (c *MQTTClient) Subscribe(subscriber service.Subscriber) error {
 
 func (c *MQTTClient) publishMessage(topic string, payload mqtt.Message) error {
 	msg := message.NewPublishMessage()
-	msg.SetPacketId(uint16(rand.Intn(math.MaxUint16)))
+	msg.SetPacketId(c.makePacketID())
 	msg.SetRetain(true)
 
 	if err := msg.SetQoS(message.QosAtLeastOnce); err != nil {
@@ -113,11 +116,19 @@ func (c *MQTTClient) publishMessage(topic string, payload mqtt.Message) error {
 	return c.connector.Publish(msg, nil)
 }
 
+func (c *MQTTClient) makePacketID() uint16 {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return uint16(c.randomGenerator.Intn(math.MaxUint16))
+}
+
 func NewMQTTClient(agentID int64, host string) *MQTTClient {
-	rand.Seed(time.Now().UnixNano())
 	return &MQTTClient{
-		connector: &service.Client{},
-		agentID:   agentID,
-		host:      host,
+		lock:            &sync.RWMutex{},
+		connector:       &service.Client{},
+		agentID:         agentID,
+		host:            host,
+		randomGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }

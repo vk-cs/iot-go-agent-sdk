@@ -39,6 +39,7 @@ func MQTTExample(login, password, host string) error {
 	if err := mqttClient.Connect(login, password); err != nil {
 		return fmt.Errorf("example error during MQTT client connection: %w", err)
 	}
+	defer mqttClient.Disconnect()
 
 	fmt.Println("Sending event (status of agent)")
 	statusTag, _ := sdk.FindTagByPath(agentConfig.Payload.Agent.Tag.Children, sdk.StatusTagPath)
