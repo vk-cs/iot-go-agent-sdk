@@ -24,10 +24,10 @@ const (
 )
 
 type MQTTClient struct {
-	lock            *sync.RWMutex
 	connector       *service.Client
 	agentID         int64
 	host            string
+	lock            *sync.Mutex
 	randomGenerator *rand.Rand
 }
 
@@ -125,10 +125,10 @@ func (c *MQTTClient) makePacketID() uint16 {
 
 func NewMQTTClient(agentID int64, host string) *MQTTClient {
 	return &MQTTClient{
-		lock:            &sync.RWMutex{},
 		connector:       &service.Client{},
 		agentID:         agentID,
 		host:            host,
+		lock:            &sync.Mutex{},
 		randomGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }

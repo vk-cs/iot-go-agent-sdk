@@ -95,9 +95,6 @@ func MQTTExample(login, password, host string) error {
 		return fmt.Errorf("example error during log publishing: %w", err)
 	}
 
-	fmt.Println("Disconnecting")
-	mqttClient.Disconnect()
-
 	fmt.Println("Finishing MQTT example func")
 	return nil
 }
